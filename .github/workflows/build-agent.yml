@@ -106,25 +106,31 @@ jobs:
           VERSION="${{ github.event.inputs.version || '0.1.0' }}"
           PLATFORM="${{ matrix.storage_prefix }}"
 
-          # Find the main installer
-          INSTALLER=$(find apps/agent/src-tauri/target -type f -name "${{ matrix.artifact_glob }}" | head -1)
+          # Find the NSIS/DMG installer (look in the bundle directory only)
+          INSTALLER=$(find apps/agent/src-tauri/target -path "*/bundle/${{ matrix.bundle_folder }}/*" -type f \( -name "*setup*.exe" -o -name "*.dmg" -o -name "*.msi" \) | head -1)
 
           if [ -z "$INSTALLER" ]; then
-            echo "⚠️  No installer found, skipping upload"
+            echo "⚠️  No installer found in bundle/${{ matrix.bundle_folder }}/, skipping upload"
             exit 0
           fi
 
-          FILENAME=$(basename "$INSTALLER")
+          # Sanitise filename: replace spaces with hyphens
+          RAW_FILENAME=$(basename "$INSTALLER")
+          FILENAME="${RAW_FILENAME// /-}"
           STORAGE_PATH="${PLATFORM}/${VERSION}/${FILENAME}"
           FILE_SIZE=$(stat -f%z "$INSTALLER" 2>/dev/null || stat -c%s "$INSTALLER" 2>/dev/null)
 
           echo "📦 Uploading ${FILENAME} (${FILE_SIZE} bytes) → ${STORAGE_PATH}"
 
-          # Upload to storage
+          # URL-encode the storage path for curl (spaces → %20)
+          ENCODED_PATH=$(printf '%s' "${STORAGE_PATH}" | sed 's/ /%20/g')
+
+          # Upload to storage (use PUT to upsert in case file already exists)
           HTTP_CODE=$(curl -s -o /tmp/upload_resp.json -w "%{http_code}" \
-            -X POST "${SUPABASE_URL}/storage/v1/object/agent-releases/${STORAGE_PATH}" \
+            -X POST "${SUPABASE_URL}/storage/v1/object/agent-releases/${ENCODED_PATH}" \
             -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
             -H "Content-Type: application/octet-stream" \
+            -H "x-upsert: true" \
             --data-binary @"${INSTALLER}")
 
           echo "Upload HTTP: ${HTTP_CODE}"
@@ -136,6 +142,7 @@ jobs:
               -H "apikey: ${SUPABASE_SERVICE_KEY}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
               -H "Content-Type: application/json" \
+              -H "Prefer: resolution=merge-duplicates" \
               -d "{
                 \"version\": \"${VERSION}\",
                 \"platform\": \"${PLATFORM}\",
