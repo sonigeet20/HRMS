@@ -1,0 +1,152 @@
+name: Build Desktop Agent
+
+on:
+  push:
+    tags:
+      - 'agent-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. 0.1.0)'
+        required: false
+        default: '0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle_folder: nsis
+            artifact_glob: '*.exe'
+            storage_prefix: windows
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            bundle_folder: dmg
+            artifact_glob: '*.dmg'
+            storage_prefix: macos
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/agent/src-tauri -> target
+
+      # Windows needs WebView2 — pre-installed on windows-latest runners
+      - name: Install system deps (Linux only)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies (npm)
+        run: npm install
+        working-directory: apps/agent
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^1"
+
+      - name: Build Tauri app
+        run: cargo tauri build --target ${{ matrix.target }}
+        working-directory: apps/agent/src-tauri
+
+      - name: Find built artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          echo "=== Searching for artifacts ==="
+          # Search both target/release and target/<triple>/release
+          FOUND=$(find apps/agent/src-tauri/target -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.msi" \) | head -5)
+          echo "$FOUND"
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FOUND" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrms-agent-${{ matrix.platform }}
+          path: |
+            apps/agent/src-tauri/target/**/release/bundle/**/*.dmg
+            apps/agent/src-tauri/target/**/release/bundle/**/*.exe
+            apps/agent/src-tauri/target/**/release/bundle/**/*.msi
+            apps/agent/src-tauri/target/release/bundle/**/*.dmg
+            apps/agent/src-tauri/target/release/bundle/**/*.exe
+            apps/agent/src-tauri/target/release/bundle/**/*.msi
+          if-no-files-found: warn
+
+      # ── Upload to Supabase Storage ──────────────────────────────
+      - name: Upload to Supabase Storage
+        if: success()
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          VERSION="${{ github.event.inputs.version || '0.1.0' }}"
+          PLATFORM="${{ matrix.storage_prefix }}"
+
+          # Find the main installer
+          INSTALLER=$(find apps/agent/src-tauri/target -type f -name "${{ matrix.artifact_glob }}" | head -1)
+
+          if [ -z "$INSTALLER" ]; then
+            echo "⚠️  No installer found, skipping upload"
+            exit 0
+          fi
+
+          FILENAME=$(basename "$INSTALLER")
+          STORAGE_PATH="${PLATFORM}/${VERSION}/${FILENAME}"
+          FILE_SIZE=$(stat -f%z "$INSTALLER" 2>/dev/null || stat -c%s "$INSTALLER" 2>/dev/null)
+
+          echo "📦 Uploading ${FILENAME} (${FILE_SIZE} bytes) → ${STORAGE_PATH}"
+
+          # Upload to storage
+          HTTP_CODE=$(curl -s -o /tmp/upload_resp.json -w "%{http_code}" \
+            -X POST "${SUPABASE_URL}/storage/v1/object/agent-releases/${STORAGE_PATH}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"${INSTALLER}")
+
+          echo "Upload HTTP: ${HTTP_CODE}"
+          cat /tmp/upload_resp.json
+
+          if [ "$HTTP_CODE" -lt 300 ]; then
+            # Register in agent_releases table
+            curl -s -X POST "${SUPABASE_URL}/rest/v1/agent_releases" \
+              -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"version\": \"${VERSION}\",
+                \"platform\": \"${PLATFORM}\",
+                \"filename\": \"${FILENAME}\",
+                \"file_size\": ${FILE_SIZE},
+                \"storage_path\": \"${STORAGE_PATH}\",
+                \"release_notes\": \"Automated build from CI (${GITHUB_SHA:0:7})\",
+                \"is_latest\": true
+              }"
+            echo ""
+            echo "✅ Registered release: ${PLATFORM} v${VERSION}"
+          else
+            echo "❌ Upload failed with HTTP ${HTTP_CODE}"
+          fi

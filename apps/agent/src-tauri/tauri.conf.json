@@ -1,0 +1,59 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "devPath": "../ui",
+    "distDir": "../ui"
+  },
+  "package": {
+    "productName": "HRMS Agent",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": { "open": true },
+      "dialog": { "all": true },
+      "notification": { "all": true }
+    },
+    "bundle": {
+      "active": true,
+      "identifier": "com.hrms.agent",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.png",
+        "icons/icon.ico"
+      ],
+      "targets": "all",
+      "macOS": {
+        "minimumSystemVersion": "10.15"
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": ""
+      }
+    },
+    "security": {
+      "csp": null
+    },
+    "systemTray": {
+      "iconPath": "icons/tray-icon.png",
+      "iconAsTemplate": true
+    },
+    "windows": [
+      {
+        "title": "HRMS Agent – Login",
+        "width": 420,
+        "height": 520,
+        "resizable": false,
+        "center": true,
+        "visible": false,
+        "label": "login"
+      }
+    ]
+  }
+}

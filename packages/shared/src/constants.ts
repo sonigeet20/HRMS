@@ -1,0 +1,66 @@
+export const APP_NAME = 'HRMS';
+
+export const ATTENDANCE_STATUS = {
+  PRESENT: 'PRESENT',
+  WFH: 'WFH',
+  ABSENT: 'ABSENT',
+  LEAVE: 'LEAVE',
+  HOLIDAY: 'HOLIDAY',
+  WEEKEND: 'WEEKEND',
+  HALF_DAY: 'HALF_DAY',
+  LATE: 'LATE',
+  NON_COMPLIANT: 'NON_COMPLIANT',
+} as const;
+
+export const WORK_MODE = {
+  HYBRID: 'HYBRID',
+  OFFICE_ONLY: 'OFFICE_ONLY',
+  WFH_ALLOWED: 'WFH_ALLOWED',
+} as const;
+
+export const WORK_MODE_DETECTED = {
+  OFFICE: 'OFFICE',
+  WFH: 'WFH',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export const USER_ROLE = {
+  ADMIN: 'ADMIN',
+  HR: 'HR',
+  EMPLOYEE: 'EMPLOYEE',
+} as const;
+
+export const EMPLOYMENT_TYPE = {
+  FULL_TIME: 'FULL_TIME',
+  PART_TIME: 'PART_TIME',
+  CONTRACT: 'CONTRACT',
+} as const;
+
+export const LEAVE_STATUS = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export const LEAVE_APPROVAL_FLOW = {
+  MANAGER_THEN_HR: 'MANAGER_THEN_HR',
+  HR_ONLY: 'HR_ONLY',
+  MANAGER_ONLY: 'MANAGER_ONLY',
+} as const;
+
+export const PAYROLL_RUN_STATUS = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;
+
+export const ACCRUAL_FREQUENCY = {
+  MONTHLY: 'MONTHLY',
+  YEARLY: 'YEARLY',
+} as const;
+
+export const DEFAULT_IDLE_THRESHOLD_MINUTES = 30;
+export const AGENT_PING_INTERVAL_MS = 120_000; // 2 minutes
+export const FEEDBACK_RATE_LIMIT_HOURS = 24;
