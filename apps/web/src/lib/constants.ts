@@ -18,6 +18,7 @@ export const NAV_ITEMS = {
     { label: 'Reports', href: '/hr/reports', icon: 'BarChart3' },
   ],
   ADMIN: [
+    { label: 'Employees', href: '/admin/employees', icon: 'Users' },
     { label: 'Settings', href: '/admin/settings', icon: 'Settings' },
     { label: 'Audit Logs', href: '/admin/audit-logs', icon: 'FileText' },
     { label: 'Agent Downloads', href: '/admin/downloads', icon: 'Download' },

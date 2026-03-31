@@ -34,31 +34,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const loadingTimeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 6000);
 
-    const fetchProfile = async (userId: string) => {
+    const fetchProfile = async (userId: string, email?: string | null) => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
         .eq('user_id', userId)
         .single();
 
-      if (error) {
-        console.error('[AuthProvider] Profile fetch error:', error.message);
-        return null;
+      if (!error && data) return data;
+
+      if (email) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
+          .ilike('email', email)
+          .single();
+
+        if (!fallbackError && fallbackData) {
+          console.warn('[AuthProvider] Profile resolved via email fallback for', email);
+          return fallbackData;
+        }
+
+        if (fallbackError) {
+          console.error('[AuthProvider] Profile email fallback error:', fallbackError.message);
+        }
       }
 
-      return data;
+      if (error) {
+        console.error('[AuthProvider] Profile fetch error:', error.message);
+      }
+
+      return null;
     };
 
     const getUser = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session } } = await supabase.auth.getSession();
+        const sessionUser = session?.user ?? null;
+
+        if (mounted && sessionUser) {
+          setUser(sessionUser);
+          const profileData = await fetchProfile(sessionUser.id, sessionUser.email ?? null);
+          if (mounted) setProfile(profileData);
+          return;
+        }
+
+        const { data: { user } } = await Promise.race([
+          supabase.auth.getUser(),
+          new Promise<{ data: { user: null } }>((resolve) =>
+            setTimeout(() => resolve({ data: { user: null } }), 5000)
+          ),
+        ]);
         if (!mounted) return;
 
         setUser(user);
 
         if (user) {
-          const data = await fetchProfile(user.id);
+          const data = await fetchProfile(user.id, user.email ?? null);
           if (!mounted) return;
           setProfile(data);
         } else {
@@ -83,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          const data = await fetchProfile(session.user.id);
+          const data = await fetchProfile(session.user.id, session.user.email ?? null);
           if (!mounted) return;
           setProfile(data);
         } else {
@@ -100,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
   }, []);
