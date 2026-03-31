@@ -14,6 +14,11 @@ type ProfileData = {
   avatar_url: string | null;
 };
 
+type ServerMeResponse = {
+  user: User | null;
+  profile: ProfileData | null;
+};
+
 interface AuthContextType {
   user: User | null;
   profile: ProfileData | null;
@@ -63,6 +68,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(retryData);
     };
 
+    const fetchFromServerSession = async (): Promise<ServerMeResponse | null> => {
+      try {
+        const res = await fetch('/api/auth/me', {
+          method: 'GET',
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (!res.ok) return null;
+        return (await res.json()) as ServerMeResponse;
+      } catch {
+        return null;
+      }
+    };
+
     const fetchProfile = async (userId: string, email?: string | null) => {
       const { data, error } = await supabase
         .from('profiles')
@@ -103,9 +122,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!mounted) return;
 
-        setUser(sessionUser);
-
         if (sessionUser) {
+          setUser(sessionUser);
           const data = await fetchProfile(sessionUser.id, sessionUser.email ?? null);
           if (!mounted) return;
           if (data) {
@@ -117,7 +135,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }, 1500);
           }
         } else {
-          setProfile(null);
+          const serverData = await fetchFromServerSession();
+          if (!mounted) return;
+
+          if (serverData?.user) {
+            const serverUser = serverData.user;
+            setUser(serverUser);
+            if (serverData.profile) {
+              setProfile(serverData.profile);
+            } else {
+              setProfile(buildFallbackProfile(serverUser));
+            }
+          } else {
+            setUser(null);
+            setProfile(null);
+          }
         }
       } catch (error) {
         console.error('[AuthProvider] getUser failed:', error);
@@ -149,7 +181,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }, 1500);
           }
         } else {
-          setProfile(null);
+          const serverData = await fetchFromServerSession();
+          if (!mounted) return;
+          if (serverData?.user) {
+            const serverUser = serverData.user;
+            setUser(serverUser);
+            setProfile(serverData.profile ?? buildFallbackProfile(serverUser));
+          } else {
+            setProfile(null);
+          }
         }
       } catch (error) {
         console.error('[AuthProvider] auth state change failed:', error);
