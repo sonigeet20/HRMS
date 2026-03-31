@@ -19,7 +19,7 @@ import { getInitials } from '@/lib/utils';
 import { NotificationCenter } from './notification-center';
 
 export function Header() {
-  const { profile, signOut } = useAuth();
+  const { profile, loading, signOut } = useAuth();
   const { data: unreadCount } = useUnreadCount();
   const router = useRouter();
 

@@ -38,11 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(user);
 
       if (user) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
           .eq('user_id', user.id)
           .single();
+        if (error) {
+          console.error('[AuthProvider] Profile fetch error:', error.message);
+        }
         setProfile(data);
       }
       setLoading(false);
@@ -53,11 +56,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('profiles')
           .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
           .eq('user_id', session.user.id)
           .single();
+        if (error) {
+          console.error('[AuthProvider] Profile fetch error on auth change:', error.message);
+        }
         setProfile(data);
       } else {
         setProfile(null);

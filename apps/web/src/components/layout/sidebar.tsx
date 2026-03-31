@@ -20,7 +20,23 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const { profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <aside className="flex h-full w-64 flex-col border-r bg-card">
+        <div className="flex h-16 items-center gap-2 border-b px-6">
+          <Building2 className="h-6 w-6 text-primary" />
+          <span className="text-lg font-bold">HRMS</span>
+        </div>
+        <div className="flex-1 p-4 space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-9 rounded-md bg-muted animate-pulse" />
+          ))}
+        </div>
+      </aside>
+    );
+  }
 
   if (!profile) return null;
 
