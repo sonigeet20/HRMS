@@ -4,6 +4,7 @@ import { corsHeaders, handleCors } from '../_shared/cors.ts';
 import { getServiceClient } from '../_shared/supabase.ts';
 import { getAuthContext } from '../_shared/auth.ts';
 import { validateInput, jsonResponse, errorResponse } from '../_shared/validators.ts';
+import { getISTDate } from '../_shared/date.ts';
 
 const pingSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
@@ -23,7 +24,8 @@ serve(async (req) => {
     const body = await req.json();
     const input = validateInput(pingSchema, body);
     const supabase = getServiceClient();
-    const today = new Date().toISOString().split('T')[0];
+    // Use IST date — never UTC, which drifts from Indian calendar before 05:30
+    const today = getISTDate();
 
     const { data: attendance } = await supabase
       .from('attendance_days')

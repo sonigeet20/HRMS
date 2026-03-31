@@ -4,6 +4,27 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/providers/auth-provider';
 
+/** Returns today's date in YYYY-MM-DD format using IST (Asia/Kolkata, UTC+5:30). */
+const getISTDate = (): string =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+/**
+ * Returns firstDay and lastDay of a given month (YYYY-MM string or undefined for current IST month)
+ * computed entirely in IST so there is no UTC midnight drift.
+ */
+function getISTMonthRange(month?: string): { firstDay: string; lastDay: string } {
+  const base = month ?? getISTDate(); // YYYY-MM-DD or YYYY-MM
+  const [yearStr, monthStr] = base.split('-');
+  const year = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10); // 1-based
+  const lastDayNum = new Date(year, m, 0).getDate(); // day 0 of next month = last day of m
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    firstDay: `${year}-${pad(m)}-01`,
+    lastDay: `${year}-${pad(m)}-${pad(lastDayNum)}`,
+  };
+}
+
 export function useAttendance(month?: string) {
   const { user } = useAuth();
   const supabase = createClient();
@@ -11,11 +32,7 @@ export function useAttendance(month?: string) {
   return useQuery({
     queryKey: ['attendance', user?.id, month],
     queryFn: async () => {
-      const now = month ? new Date(month) : new Date();
-      const year = now.getFullYear();
-      const m = now.getMonth();
-      const firstDay = new Date(year, m, 1).toISOString().split('T')[0];
-      const lastDay = new Date(year, m + 1, 0).toISOString().split('T')[0];
+      const { firstDay, lastDay } = getISTMonthRange(month);
 
       const { data, error } = await supabase
         .from('attendance_days')
@@ -39,7 +56,7 @@ export function useOrgAttendance(date?: string) {
   return useQuery({
     queryKey: ['org-attendance', profile?.organization_id, date],
     queryFn: async () => {
-      const targetDate = date ?? new Date().toISOString().split('T')[0];
+      const targetDate = date ?? getISTDate();
       const { data, error } = await supabase
         .from('attendance_days')
         .select('*, profiles!fk_attendance_days_profile(full_name, employee_code, designation)')

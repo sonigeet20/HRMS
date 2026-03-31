@@ -17,7 +17,7 @@ export default function EmployeeDashboard() {
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const todayAttendance = attendance?.find((a) => a.date === today);
   const isCheckedIn = !!todayAttendance?.check_in_at && !todayAttendance?.check_out_at;
   const isCheckedOut = !!todayAttendance?.check_out_at;

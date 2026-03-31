@@ -5,6 +5,7 @@ import { getServiceClient } from '../_shared/supabase.ts';
 import { getAuthContext } from '../_shared/auth.ts';
 import { validateInput, jsonResponse, errorResponse } from '../_shared/validators.ts';
 import { logAudit } from '../_shared/audit.ts';
+import { getISTDate } from '../_shared/date.ts';
 
 const checkInSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
@@ -25,7 +26,8 @@ serve(async (req) => {
     const body = await req.json();
     const input = validateInput(checkInSchema, body);
     const supabase = getServiceClient();
-    const today = new Date().toISOString().split('T')[0];
+    // Use IST date — never UTC, which drifts from Indian calendar before 05:30
+    const today = getISTDate();
 
     // Check if already checked in today
     const { data: existing } = await supabase
@@ -63,7 +65,8 @@ serve(async (req) => {
     // Determine office compliance
     let officeCompliant: boolean | null = null;
     let workModeDetected: 'OFFICE' | 'WFH' | 'UNKNOWN' = 'UNKNOWN';
-    let status: string = 'PRESENT';
+    // Default to WFH — only override to PRESENT/OFFICE after confirmed geo compliance
+    let status: string = 'WFH';
 
     if (input.latitude != null && input.longitude != null && location) {
       // Check geofence using haversine
@@ -122,6 +125,14 @@ serve(async (req) => {
       }
       status = 'NON_COMPLIANT';
       officeCompliant = null;
+    }
+
+    // When no policy exists and no geo was provided, keep WFH default
+    // When geo confirms office compliance, status is already set to PRESENT above
+    // Sync workModeDetected with final status if geo was unavailable
+    if (workModeDetected === 'UNKNOWN') {
+      if (status === 'WFH' || status === 'NON_COMPLIANT') workModeDetected = 'WFH';
+      else if (status === 'PRESENT') workModeDetected = 'OFFICE';
     }
 
     const now = new Date().toISOString();

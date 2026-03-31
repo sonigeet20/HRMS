@@ -5,6 +5,7 @@ import { getServiceClient } from '../_shared/supabase.ts';
 import { getAuthContext } from '../_shared/auth.ts';
 import { validateInput, jsonResponse, errorResponse } from '../_shared/validators.ts';
 import { logAudit } from '../_shared/audit.ts';
+import { getISTDate } from '../_shared/date.ts';
 
 const checkOutSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
@@ -23,7 +24,8 @@ serve(async (req) => {
     const body = await req.json();
     const input = validateInput(checkOutSchema, body);
     const supabase = getServiceClient();
-    const today = new Date().toISOString().split('T')[0];
+    // Use IST date — never UTC, which drifts from Indian calendar before 05:30
+    const today = getISTDate();
 
     // Get today's attendance
     const { data: attendance } = await supabase
