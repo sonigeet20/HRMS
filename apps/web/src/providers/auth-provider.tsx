@@ -4,17 +4,19 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 
+type ProfileData = {
+  id: string;
+  full_name: string;
+  email: string;
+  role: 'ADMIN' | 'HR' | 'EMPLOYEE';
+  organization_id: string;
+  employee_code: string;
+  avatar_url: string | null;
+};
+
 interface AuthContextType {
   user: User | null;
-  profile: {
-    id: string;
-    full_name: string;
-    email: string;
-    role: 'ADMIN' | 'HR' | 'EMPLOYEE';
-    organization_id: string;
-    employee_code: string;
-    avatar_url: string | null;
-  } | null;
+  profile: ProfileData | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -41,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const buildFallbackProfile = (u: User): AuthContextType['profile'] => {
       const md = (u.user_metadata ?? {}) as Record<string, unknown>;
       const role = String(md.role ?? 'EMPLOYEE').toUpperCase();
-      const safeRole: AuthContextType['profile']['role'] =
+      const safeRole: ProfileData['role'] =
         role === 'ADMIN' || role === 'HR' ? (role as 'ADMIN' | 'HR') : 'EMPLOYEE';
 
       return {
