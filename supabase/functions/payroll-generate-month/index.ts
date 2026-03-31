@@ -61,17 +61,29 @@ serve(async (req) => {
       .limit(1);
     const nextVersion = (maxVersionData?.[0]?.version ?? 0) + 1;
 
-    // Get all active employees with payroll profiles
-    const { data: employees } = await supabase
+    // Get all active employees
+    const { data: employees, error: employeesError } = await supabase
       .from('profiles')
-      .select(`
-        user_id, full_name, hr_policy_id, location_id,
-        payroll_profiles!inner(base_monthly_salary, currency, salary_structure)
-      `)
+      .select('user_id, full_name, hr_policy_id, location_id')
       .eq('organization_id', ctx.orgId)
       .eq('is_active', true);
 
-    if (!employees || employees.length === 0) {
+    if (employeesError) throw employeesError;
+
+    // Fetch payroll profiles separately (more robust than relational inner join here)
+    const { data: payrollProfiles, error: payrollProfilesError } = await supabase
+      .from('payroll_profiles')
+      .select('user_id, base_monthly_salary, currency, salary_structure')
+      .eq('organization_id', ctx.orgId);
+
+    if (payrollProfilesError) throw payrollProfilesError;
+
+    const payrollByUser = new Map((payrollProfiles ?? []).map((p: any) => [p.user_id, p]));
+    const employeesWithPayroll = (employees ?? [])
+      .map((emp: any) => ({ ...emp, payroll_profile: payrollByUser.get(emp.user_id) }))
+      .filter((emp: any) => !!emp.payroll_profile);
+
+    if (employeesWithPayroll.length === 0) {
       await supabase
         .from('payroll_runs')
         .update({ status: 'FAILED', completed_at: new Date().toISOString() })
@@ -100,10 +112,8 @@ serve(async (req) => {
     let totalNet = 0;
     const payslips: any[] = [];
 
-    for (const emp of employees) {
-      const payrollProfile = Array.isArray(emp.payroll_profiles)
-        ? emp.payroll_profiles[0]
-        : emp.payroll_profiles;
+    for (const emp of employeesWithPayroll) {
+      const payrollProfile = emp.payroll_profile;
 
       if (!payrollProfile) continue;
 
