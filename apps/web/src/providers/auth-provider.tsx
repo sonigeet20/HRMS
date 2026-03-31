@@ -38,6 +38,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (mounted) setLoading(false);
     }, 6000);
 
+    const buildFallbackProfile = (u: User): AuthContextType['profile'] => {
+      const md = (u.user_metadata ?? {}) as Record<string, unknown>;
+      const role = String(md.role ?? 'EMPLOYEE').toUpperCase();
+      const safeRole: AuthContextType['profile']['role'] =
+        role === 'ADMIN' || role === 'HR' ? (role as 'ADMIN' | 'HR') : 'EMPLOYEE';
+
+      return {
+        id: u.id,
+        full_name: String(md.full_name ?? u.email ?? 'User'),
+        email: String(u.email ?? ''),
+        role: safeRole,
+        organization_id: String(md.organization_id ?? ''),
+        employee_code: String(md.employee_code ?? 'N/A'),
+        avatar_url: null,
+      };
+    };
+
+    const retryResolveProfile = async (u: User) => {
+      const retryData = await fetchProfile(u.id, u.email ?? null);
+      if (!mounted || !retryData) return;
+      setProfile(retryData);
+    };
+
     const fetchProfile = async (userId: string, email?: string | null) => {
       const { data, error } = await supabase
         .from('profiles')
@@ -83,7 +106,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (sessionUser) {
           const data = await fetchProfile(sessionUser.id, sessionUser.email ?? null);
           if (!mounted) return;
-          setProfile(data);
+          if (data) {
+            setProfile(data);
+          } else {
+            setProfile(buildFallbackProfile(sessionUser));
+            setTimeout(() => {
+              if (mounted) retryResolveProfile(sessionUser);
+            }, 1500);
+          }
         } else {
           setProfile(null);
         }
@@ -108,7 +138,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (session?.user) {
           const data = await fetchProfile(session.user.id, session.user.email ?? null);
           if (!mounted) return;
-          setProfile(data);
+          if (data) {
+            setProfile(data);
+          } else {
+            setProfile(buildFallbackProfile(session.user));
+            setTimeout(() => {
+              if (mounted) retryResolveProfile(session.user);
+            }, 1500);
+          }
         } else {
           setProfile(null);
         }
