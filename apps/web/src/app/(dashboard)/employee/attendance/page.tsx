@@ -13,7 +13,7 @@ export default function AttendancePage() {
   const now = new Date();
   const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
   const monthStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-01`;
-  const { data: attendance, isLoading } = useAttendance(monthStr);
+  const { data: attendance, isFetching: isLoading } = useAttendance(monthStr);
 
   const year = targetDate.getFullYear();
   const month = targetDate.getMonth();

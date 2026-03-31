@@ -10,7 +10,7 @@ export default function HRFeedbackPage() {
   const { profile } = useAuth();
   const supabase = createClient();
 
-  const { data: feedback, isLoading } = useQuery({
+  const { data: feedback, isFetching: isLoading } = useQuery({
     queryKey: ['feedback', profile?.organization_id],
     queryFn: async () => {
       const { data, error } = await supabase

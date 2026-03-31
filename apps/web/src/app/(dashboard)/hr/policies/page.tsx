@@ -61,7 +61,7 @@ export default function HRPoliciesPage() {
   const [form, setForm] = useState<PolicyForm>(defaultForm);
   const [saving, setSaving] = useState(false);
 
-  const { data: policies, isLoading } = useQuery({
+  const { data: policies, isFetching: isLoading } = useQuery({
     queryKey: ['hr-policies', profile?.organization_id],
     queryFn: async () => {
       const { data, error } = await supabase

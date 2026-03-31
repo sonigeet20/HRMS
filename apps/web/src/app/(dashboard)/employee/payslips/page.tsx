@@ -10,7 +10,7 @@ import { formatCurrency } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 
 export default function PayslipsPage() {
-  const { data: payslips, isLoading } = usePayslips();
+  const { data: payslips, isFetching: isLoading } = usePayslips();
   const supabase = createClient();
 
   const downloadPayslip = async (filePath: string | null) => {

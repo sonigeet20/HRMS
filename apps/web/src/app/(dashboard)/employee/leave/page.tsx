@@ -24,7 +24,7 @@ import { useQuery } from '@tanstack/react-query';
 export default function LeavePage() {
   const { profile } = useAuth();
   const { data: balances } = useLeaveBalances();
-  const { data: requests, isLoading } = useLeaveRequests();
+  const { data: requests, isFetching: isLoading } = useLeaveRequests();
   const applyLeave = useApplyLeave();
   const supabase = createClient();
 

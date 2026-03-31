@@ -12,7 +12,7 @@ import { Check, X } from 'lucide-react';
 
 export default function HRLeavesPage() {
   const [tab, setTab] = useState('PENDING');
-  const { data: requests, isLoading } = useOrgLeaveRequests(tab === 'ALL' ? undefined : tab);
+  const { data: requests, isFetching: isLoading } = useOrgLeaveRequests(tab === 'ALL' ? undefined : tab);
   const approveLeave = useApproveLeave();
 
   const handleAction = async (id: string, action: 'APPROVED' | 'REJECTED') => {

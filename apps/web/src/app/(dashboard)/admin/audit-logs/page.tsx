@@ -11,7 +11,7 @@ export default function AuditLogsPage() {
   const { profile } = useAuth();
   const supabase = createClient();
 
-  const { data: logs, isLoading } = useQuery({
+  const { data: logs, isFetching: isLoading } = useQuery({
     queryKey: ['audit-logs', profile?.organization_id],
     queryFn: async () => {
       const { data, error } = await supabase

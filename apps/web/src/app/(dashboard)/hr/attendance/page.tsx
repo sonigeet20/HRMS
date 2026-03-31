@@ -10,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ATTENDANCE_STATUS_COLORS } from '@/lib/constants';
 
 export default function HRAttendancePage() {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() =>
+    new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  );
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const { data: attendance, isLoading } = useOrgAttendance(date);
+  const { data: attendance, isFetching: isLoading } = useOrgAttendance(date);
 
   const filtered = attendance?.filter((a: any) =>
     statusFilter === 'ALL' || a.status === statusFilter

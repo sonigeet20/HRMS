@@ -74,7 +74,7 @@ export default function AdminEmployeesPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EmployeeForm>(EMPTY_FORM);
 
-  const { data: employees, isLoading } = useQuery({
+  const { data: employees, isFetching: isLoading } = useQuery({
     queryKey: ['admin-employees', profile?.organization_id],
     queryFn: async () => {
       const { data, error } = await supabase

@@ -16,7 +16,7 @@ export default function HREmployeesPage() {
   const supabase = createClient();
   const [search, setSearch] = useState('');
 
-  const { data: employees, isLoading } = useQuery({
+  const { data: employees, isFetching: isLoading } = useQuery({
     queryKey: ['employees', profile?.organization_id],
     queryFn: async () => {
       const { data, error } = await supabase

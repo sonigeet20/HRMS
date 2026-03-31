@@ -12,7 +12,7 @@ import { ATTENDANCE_STATUS_COLORS } from '@/lib/constants';
 
 export default function EmployeeDashboard() {
   const { profile } = useAuth();
-  const { data: attendance, isLoading: attLoading } = useAttendance();
+  const { data: attendance, isFetching: attLoading } = useAttendance();
   const { data: leaveBalances } = useLeaveBalances();
   const checkIn = useCheckIn();
   const checkOut = useCheckOut();

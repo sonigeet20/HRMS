@@ -88,13 +88,23 @@ export function AuthProvider({ children, initialUser, initialProfile }: AuthProv
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
-      // If the server already confirmed auth state, skip INITIAL_SESSION —
-      // the server data is fresher (read AFTER middleware refreshed the token).
-      if (event === 'INITIAL_SESSION' && initialUser !== undefined) {
+      if (initialUser !== undefined) {
+        // Server already confirmed auth state — it's the freshest source of truth.
+        // Only react to genuine session lifecycle events; ignore INITIAL_SESSION /
+        // SIGNED_IN re-fires which can race with in-flight profile fetches and
+        // accidentally null-out a perfectly valid profile.
         clearTimeout(timeout);
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setProfile(null);
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          // Keep user object up-to-date with fresh token, but don't touch profile.
+          setUser(session.user);
+        }
         return;
       }
 
+      // ── Client fallback path (server didn't resolve, e.g. network error) ──────
       const authUser = session?.user ?? null;
       setUser(authUser);
 
@@ -103,7 +113,8 @@ export function AuthProvider({ children, initialUser, initialProfile }: AuthProv
         if (event !== 'TOKEN_REFRESHED') {
           const profileData = await fetchProfile(authUser.id, authUser.email);
           if (!mounted) return;
-          setProfile(profileData);
+          // Never overwrite a valid profile with null — only clear on sign-out
+          if (profileData) setProfile(profileData);
         }
       } else {
         setProfile(null);

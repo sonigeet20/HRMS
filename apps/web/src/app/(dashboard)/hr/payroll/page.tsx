@@ -13,11 +13,12 @@ import { Play, Download, FileSpreadsheet } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 export default function HRPayrollPage() {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const istToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+  const [istYear, istMon] = istToday.split('-');
+  const defaultMonth = `${istYear}-${istMon}-01`;
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
   const { data: runs } = usePayrollRuns();
-  const { data: register, isLoading: regLoading } = usePayrollRegister(selectedMonth);
+  const { data: register, isFetching: regLoading } = usePayrollRegister(selectedMonth);
   const generatePayroll = useGeneratePayroll();
   const exportCsv = useExportPayrollCsv();
 
