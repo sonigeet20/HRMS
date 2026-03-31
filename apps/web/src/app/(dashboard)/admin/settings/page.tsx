@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 
 interface OfficeLocation {
   id: string;
+  organization_id: string;
   name: string;
   address: string | null;
   latitude: number;
