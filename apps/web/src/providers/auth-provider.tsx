@@ -33,45 +33,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+    let mounted = true;
 
-      if (user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
-          .eq('user_id', user.id)
-          .single();
-        if (error) {
-          console.error('[AuthProvider] Profile fetch error:', error.message);
-        }
-        setProfile(data);
+    const fetchProfile = async (userId: string) => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('[AuthProvider] Profile fetch error:', error.message);
+        return null;
       }
-      setLoading(false);
+
+      return data;
+    };
+
+    const getUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!mounted) return;
+
+        setUser(user);
+
+        if (user) {
+          const data = await fetchProfile(user.id);
+          if (!mounted) return;
+          setProfile(data);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error('[AuthProvider] getUser failed:', error);
+        if (!mounted) return;
+        setUser(null);
+        setProfile(null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     getUser();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, email, role, organization_id, employee_code, avatar_url')
-          .eq('user_id', session.user.id)
-          .single();
-        if (error) {
-          console.error('[AuthProvider] Profile fetch error on auth change:', error.message);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        if (!mounted) return;
+
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          const data = await fetchProfile(session.user.id);
+          if (!mounted) return;
+          setProfile(data);
+        } else {
+          setProfile(null);
         }
-        setProfile(data);
-      } else {
+      } catch (error) {
+        console.error('[AuthProvider] auth state change failed:', error);
+        if (!mounted) return;
         setProfile(null);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

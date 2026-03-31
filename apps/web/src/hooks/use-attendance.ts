@@ -42,7 +42,7 @@ export function useOrgAttendance(date?: string) {
       const targetDate = date ?? new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('attendance_days')
-        .select('*, profiles!inner(full_name, employee_code, designation)')
+        .select('*, profiles!fk_attendance_days_profile(full_name, employee_code, designation)')
         .eq('organization_id', profile!.organization_id)
         .eq('date', targetDate)
         .order('created_at');

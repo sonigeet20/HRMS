@@ -56,7 +56,7 @@ export function useOrgLeaveRequests(status?: string) {
     queryFn: async () => {
       let query = supabase
         .from('leave_requests')
-        .select('*, leave_types(name, code), profiles!inner(full_name, employee_code)')
+        .select('*, leave_types(name, code), profiles!fk_leave_requests_profile(full_name, employee_code)')
         .eq('organization_id', profile!.organization_id)
         .order('created_at', { ascending: false });
 

@@ -54,7 +54,7 @@ export function usePayrollRegister(month: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payslips')
-        .select('*, profiles!inner(full_name, employee_code, designation)')
+        .select('*, profiles!fk_payslips_profile(full_name, employee_code, designation)')
         .eq('organization_id', profile!.organization_id)
         .eq('month', month)
         .eq('is_active', true)
