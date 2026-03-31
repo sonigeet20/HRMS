@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import {
   LayoutDashboard, Clock, CalendarOff, Receipt, User,
   MessageSquare, Users, Shield, Banknote, BarChart3,
@@ -20,7 +21,15 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { profile, loading } = useAuth();
+
+  // If auth resolved with no profile, redirect to login
+  useEffect(() => {
+    if (!loading && !profile) {
+      router.replace('/login');
+    }
+  }, [loading, profile, router]);
 
   if (loading) {
     return (

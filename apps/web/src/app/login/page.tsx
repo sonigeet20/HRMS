@@ -30,15 +30,15 @@ export default function LoginPage() {
     }
 
     toast.success('Signed in successfully');
-    const { data: sessionData } = await supabase.auth.getSession();
-    const sessionUserId = sessionData.session?.user?.id;
 
-    if (sessionUserId) {
+    // Fetch role to redirect to the right dashboard
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('user_id', sessionUserId)
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
 
       if (profile?.role === 'ADMIN') {
         router.push('/admin/employees');
@@ -50,8 +50,6 @@ export default function LoginPage() {
     } else {
       router.push('/employee/dashboard');
     }
-
-    router.refresh();
   };
 
   return (
