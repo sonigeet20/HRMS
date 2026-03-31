@@ -30,7 +30,27 @@ export default function LoginPage() {
     }
 
     toast.success('Signed in successfully');
-    router.push('/employee/dashboard');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const sessionUserId = sessionData.session?.user?.id;
+
+    if (sessionUserId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('user_id', sessionUserId)
+        .single();
+
+      if (profile?.role === 'ADMIN') {
+        router.push('/admin/employees');
+      } else if (profile?.role === 'HR') {
+        router.push('/hr/employees');
+      } else {
+        router.push('/employee/dashboard');
+      }
+    } else {
+      router.push('/employee/dashboard');
+    }
+
     router.refresh();
   };
 
