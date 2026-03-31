@@ -52,10 +52,18 @@ fn set_auth_token(
     // Update in-memory state
     {
         let mut s = state.lock().unwrap();
-        s.access_token = Some(access_token);
+        s.access_token = Some(access_token.clone());
         s.refresh_token = Some(refresh_token);
         s.user_email = Some(email.clone());
     }
+
+    // Register device session in the background
+    let state_clone = state.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = register_device_session(&state_clone).await {
+            eprintln!("[device] Failed to register session: {}", e);
+        }
+    });
 
     // Update tray menu to show logged-in state
     let _ = app.tray_handle().set_menu(build_tray_menu(false, Some(&email)));
@@ -232,6 +240,105 @@ fn main() {
         .expect("error while running HRMS Agent");
 }
 
+async fn register_device_session(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
+    let (api_base, token) = {
+        let s = state.lock().unwrap();
+        (s.api_base.clone(), s.access_token.clone())
+    };
+
+    let token = token.ok_or("Not logged in")?;
+    let device_name = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown-device".to_string());
+
+    let device_os = if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    };
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{}/device-exchange-token", api_base))
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::json!({
+            "device_name": device_name,
+            "device_os": device_os,
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        let body: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+        if let Some(session_id) = body.get("session_id").and_then(|v| v.as_str()) {
+            let mut s = state.lock().unwrap();
+            s.device_session_id = Some(session_id.to_string());
+        }
+        println!("✓ Device session registered");
+        Ok(())
+    } else {
+        let body = res.text().await.unwrap_or_default();
+        Err(format!("Device registration failed: {}", body))
+    }
+}
+
+/// Refresh the access token using the stored refresh token.
+/// Returns true if refresh succeeded, false otherwise.
+pub async fn refresh_auth_token(state: &Arc<Mutex<AppState>>) -> bool {
+    let (refresh_token, api_base) = {
+        let s = state.lock().unwrap();
+        (s.refresh_token.clone(), s.api_base.clone())
+    };
+
+    let refresh_token = match refresh_token {
+        Some(rt) => rt,
+        None => return false,
+    };
+
+    // Supabase auth refresh endpoint
+    let supabase_url = api_base
+        .replace("/functions/v1", "");
+    let anon_key = std::env::var("HRMS_ANON_KEY").unwrap_or_default();
+
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{}/auth/v1/token?grant_type=refresh_token", supabase_url))
+        .header("apikey", &anon_key)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({ "refresh_token": refresh_token }))
+        .send()
+        .await;
+
+    match res {
+        Ok(response) if response.status().is_success() => {
+            if let Ok(body) = response.json::<serde_json::Value>().await {
+                let new_access = body.get("access_token").and_then(|v| v.as_str());
+                let new_refresh = body.get("refresh_token").and_then(|v| v.as_str());
+
+                if let (Some(at), Some(rt)) = (new_access, new_refresh) {
+                    let _ = credentials::save_token(at);
+                    let _ = credentials::save_refresh_token(rt);
+
+                    let mut s = state.lock().unwrap();
+                    s.access_token = Some(at.to_string());
+                    s.refresh_token = Some(rt.to_string());
+
+                    println!("[auth] Token refreshed successfully");
+                    return true;
+                }
+            }
+            false
+        }
+        _ => {
+            eprintln!("[auth] Token refresh failed");
+            false
+        }
+    }
+}
+
 async fn do_checkin(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
     let (api_base, token) = {
         let s = state.lock().unwrap();
@@ -248,7 +355,26 @@ async fn do_checkin(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    if !res.status().is_success() {
+    if res.status() == 401 {
+        // Try refreshing token and retry once
+        if refresh_auth_token(state).await {
+            let new_token = state.lock().unwrap().access_token.clone().unwrap_or_default();
+            let retry = client
+                .post(format!("{}/attendance-checkin", api_base))
+                .header("Authorization", format!("Bearer {}", new_token))
+                .json(&serde_json::json!({ "source": "AGENT" }))
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if !retry.status().is_success() {
+                let body = retry.text().await.unwrap_or_default();
+                return Err(format!("Check-in failed after refresh: {}", body));
+            }
+        } else {
+            return Err("Check-in failed: unauthorized, token refresh failed".to_string());
+        }
+    } else if !res.status().is_success() {
         let body = res.text().await.unwrap_or_default();
         return Err(format!("Check-in failed: {}", body));
     }
@@ -273,7 +399,26 @@ async fn do_checkout(state: &Arc<Mutex<AppState>>) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    if !res.status().is_success() {
+    if res.status() == 401 {
+        // Try refreshing token and retry once
+        if refresh_auth_token(state).await {
+            let new_token = state.lock().unwrap().access_token.clone().unwrap_or_default();
+            let retry = client
+                .post(format!("{}/attendance-checkout", api_base))
+                .header("Authorization", format!("Bearer {}", new_token))
+                .json(&serde_json::json!({}))
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if !retry.status().is_success() {
+                let body = retry.text().await.unwrap_or_default();
+                return Err(format!("Check-out failed after refresh: {}", body));
+            }
+        } else {
+            return Err("Check-out failed: unauthorized, token refresh failed".to_string());
+        }
+    } else if !res.status().is_success() {
         let body = res.text().await.unwrap_or_default();
         return Err(format!("Check-out failed: {}", body));
     }

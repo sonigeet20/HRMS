@@ -21,7 +21,7 @@ export default function HREmployeesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*, departments(name), locations(name)')
+        .select('*, departments!fk_profiles_department(name), locations(name)')
         .eq('organization_id', profile!.organization_id)
         .order('full_name');
       if (error) throw error;

@@ -18,7 +18,7 @@ export default function ProfilePage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('*, departments(name), locations(name)')
+        .select('*, departments!fk_profiles_department(name), locations(name)')
         .eq('user_id', user!.id)
         .single();
       return data;

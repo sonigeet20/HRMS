@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 pub async fn start_idle_detection(state: Arc<Mutex<AppState>>) {
     let mut was_idle = false;
     let idle_threshold_secs: u64 = 300; // 5 minutes
-    let mut idle_start: Option<std::time::Instant> = None;
+    let mut idle_start: Option<(std::time::Instant, chrono::DateTime<chrono::Utc>)> = None;
 
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
@@ -27,41 +27,59 @@ pub async fn start_idle_detection(state: Arc<Mutex<AppState>>) {
 
         if idle_secs >= idle_threshold_secs {
             if !was_idle {
-                // Transition to idle
+                // Transition to idle — record both monotonic and wall-clock time
                 was_idle = true;
-                idle_start = Some(std::time::Instant::now());
+                idle_start = Some((std::time::Instant::now(), chrono::Utc::now()));
                 println!("[idle] System became idle ({} secs)", idle_secs);
             }
         } else if was_idle {
             // Transition from idle to active
             was_idle = false;
-            let duration_secs = idle_start
-                .map(|s| s.elapsed().as_secs())
-                .unwrap_or(0);
+            let (duration_secs, started_at_iso) = idle_start
+                .map(|(inst, wall)| (inst.elapsed().as_secs(), wall.to_rfc3339()))
+                .unwrap_or((0, chrono::Utc::now().to_rfc3339()));
             idle_start = None;
+
+            // Convert seconds to minutes (round up so short idles still register)
+            let idle_minutes = ((duration_secs as f64) / 60.0).ceil() as u64;
 
             if let Some(ref token) = token {
                 let client = reqwest::Client::new();
                 let payload = serde_json::json!({
-                    "idle_duration_seconds": duration_secs,
-                    "source": "AGENT",
+                    "idle_minutes": idle_minutes,
+                    "started_at": started_at_iso,
                 });
 
-                let _ = client
+                match client
                     .post(format!("{}/attendance-idle-event", api_base))
                     .header("Authorization", format!("Bearer {}", token))
                     .json(&payload)
                     .send()
-                    .await;
+                    .await
+                {
+                    Ok(res) if res.status() == reqwest::StatusCode::UNAUTHORIZED => {
+                        eprintln!("[idle] 401 Unauthorized — attempting token refresh");
+                        if crate::refresh_auth_token(&state).await {
+                            let new_token = state.lock().unwrap().access_token.clone().unwrap_or_default();
+                            let _ = client
+                                .post(format!("{}/attendance-idle-event", api_base))
+                                .header("Authorization", format!("Bearer {}", new_token))
+                                .json(&payload)
+                                .send()
+                                .await;
+                        }
+                    }
+                    _ => {}
+                }
 
-                println!("[idle] Reported {} seconds of idle time", duration_secs);
+                println!("[idle] Reported {} minutes of idle time (started at {})", idle_minutes, started_at_iso);
             }
         }
     }
 }
 
 /// Gets the system idle time in seconds.
-fn get_system_idle_seconds() -> Option<u64> {
+pub fn get_system_idle_seconds() -> Option<u64> {
     #[cfg(target_os = "macos")]
     {
         let output = std::process::Command::new("ioreg")

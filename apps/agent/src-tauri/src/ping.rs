@@ -17,9 +17,9 @@ pub async fn start_ping_loop(state: Arc<Mutex<AppState>>) {
 
         if let Some(token) = token {
             let client = reqwest::Client::new();
+            let idle_secs = crate::idle::get_system_idle_seconds().unwrap_or(0);
             let payload = serde_json::json!({
-                "source": "AGENT",
-                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "idle_seconds": idle_secs as i64,
             });
 
             match client
@@ -31,6 +31,19 @@ pub async fn start_ping_loop(state: Arc<Mutex<AppState>>) {
             {
                 Ok(res) if res.status().is_success() => {
                     println!("[ping] OK at {}", chrono::Local::now().format("%H:%M:%S"));
+                }
+                Ok(res) if res.status() == reqwest::StatusCode::UNAUTHORIZED => {
+                    eprintln!("[ping] 401 Unauthorized — attempting token refresh");
+                    if crate::refresh_auth_token(&state).await {
+                        // Retry with new token
+                        let new_token = state.lock().unwrap().access_token.clone().unwrap_or_default();
+                        let _ = client
+                            .post(format!("{}/attendance-ping", api_base))
+                            .header("Authorization", format!("Bearer {}", new_token))
+                            .json(&payload)
+                            .send()
+                            .await;
+                    }
                 }
                 Ok(res) => {
                     eprintln!("[ping] Server returned {}", res.status());
