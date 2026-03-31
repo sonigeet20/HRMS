@@ -52,33 +52,59 @@ async function fetchProfile(userId: string, email?: string | null): Promise<Prof
   return null;
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [loading, setLoading] = useState(true);
+interface AuthProviderProps {
+  children: React.ReactNode;
+  /**
+   * Passed from the async Server Component in layout.tsx.
+   * undefined  = server did not resolve (network error, etc.) → client falls back to onAuthStateChange
+   * null       = server confirmed the user is NOT authenticated
+   * User       = server confirmed the user IS authenticated
+   */
+  initialUser?: User | null;
+  initialProfile?: ProfileData | null;
+}
+
+export function AuthProvider({ children, initialUser, initialProfile }: AuthProviderProps) {
+  // Seed state from server so the first render is already correct
+  const [user, setUser] = useState<User | null>(initialUser ?? null);
+  const [profile, setProfile] = useState<ProfileData | null>(initialProfile ?? null);
+  // loading = false  → server resolved the session (most common path)
+  // loading = true   → server did not resolve; wait for onAuthStateChange
+  const [loading, setLoading] = useState<boolean>(initialUser === undefined);
 
   useEffect(() => {
     let mounted = true;
 
+    // Only needed when server did not resolve (rare)
     const timeout = setTimeout(() => {
       if (mounted) {
-        console.warn('[Auth] timeout forcing loading=false');
+        console.warn('[Auth] timeout — forcing loading=false');
         setLoading(false);
       }
-    }, 8000);
+    }, 5000);
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+
+      // If the server already confirmed auth state, skip INITIAL_SESSION —
+      // the server data is fresher (read AFTER middleware refreshed the token).
+      if (event === 'INITIAL_SESSION' && initialUser !== undefined) {
+        clearTimeout(timeout);
+        return;
+      }
 
       const authUser = session?.user ?? null;
       setUser(authUser);
 
       if (authUser) {
-        const profileData = await fetchProfile(authUser.id, authUser.email);
-        if (!mounted) return;
-        setProfile(profileData);
+        // TOKEN_REFRESHED only changes the token, not the profile — skip re-fetch
+        if (event !== 'TOKEN_REFRESHED') {
+          const profileData = await fetchProfile(authUser.id, authUser.email);
+          if (!mounted) return;
+          setProfile(profileData);
+        }
       } else {
         setProfile(null);
       }

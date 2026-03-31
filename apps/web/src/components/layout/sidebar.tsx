@@ -22,14 +22,14 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
 
-  // If auth resolved with no profile, redirect to login
+  // Redirect to login only when definitely unauthenticated (user is null after loading)
   useEffect(() => {
-    if (!loading && !profile) {
+    if (!loading && !user) {
       router.replace('/login');
     }
-  }, [loading, profile, router]);
+  }, [loading, user, router]);
 
   if (loading) {
     return (

@@ -35,14 +35,24 @@ export async function updateSession(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
+    const redirectRes = NextResponse.redirect(url);
+    // Copy any refreshed session cookies so they are not lost on redirect
+    supabaseResponse.cookies.getAll().forEach(({ name, value, ...rest }) => {
+      redirectRes.cookies.set(name, value, rest);
+    });
+    return redirectRes;
   }
 
-  // Redirect authenticated users from login to dashboard
+  // Redirect authenticated users from login to correct dashboard
   if (user && request.nextUrl.pathname === '/login') {
     const url = request.nextUrl.clone();
     url.pathname = '/employee/dashboard';
-    return NextResponse.redirect(url);
+    const redirectRes = NextResponse.redirect(url);
+    // Copy refreshed session cookies — CRITICAL: without this the new token is lost
+    supabaseResponse.cookies.getAll().forEach(({ name, value, ...rest }) => {
+      redirectRes.cookies.set(name, value, rest);
+    });
+    return redirectRes;
   }
 
   return supabaseResponse;
